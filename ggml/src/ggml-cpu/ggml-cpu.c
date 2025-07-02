@@ -1256,6 +1256,9 @@ UseGgmlGemm1:;
 #endif
 
     if (src1->type != vec_dot_type) {
+        // Quantization timing measurement
+        const uint64_t quant_start_time = ggml_time_us();
+        
         char * wdata = params->wdata;
 
         const size_t nbw0 = ggml_type_size(vec_dot_type);
@@ -1266,6 +1269,9 @@ UseGgmlGemm1:;
         assert(params->wsize >= ne13*nbw3);
         GGML_ASSERT(src1->type == GGML_TYPE_F32);
 
+        // Calculate total elements being quantized by this thread
+        int64_t total_elements_quantized = 0;
+
     #if 0
         for (int64_t i13 = 0; i13 < ne13; ++i13) {
             for (int64_t i12 = 0; i12 < ne12; ++i12) {
@@ -1273,6 +1279,7 @@ UseGgmlGemm1:;
                     from_float((float *)((char *) src1->data + i13*nb13 + i12*nb12 + i11*nb11),
                                (void *)               (wdata + i13*nbw3 + i12*nbw2 + i11*nbw1),
                                 ne10);
+                    total_elements_quantized += ne10;
                 }
             }
         }
@@ -1286,10 +1293,22 @@ UseGgmlGemm1:;
                     from_float((float *)((char *) src1->data + i13*nb13 + i12*nb12 + i11*nb11 + ne10_block_start*bs*nb10),
                                (void *)               (wdata + i13*nbw3 + i12*nbw2 + i11*nbw1 + ne10_block_start*nbw0),
                                (ne10_block_end - ne10_block_start) * bs);
+                    total_elements_quantized += (ne10_block_end - ne10_block_start) * bs;
                 }
             }
         }
     #endif
+        
+        const uint64_t quant_end_time = ggml_time_us();
+        const double quant_time_ms = (quant_end_time - quant_start_time) / 1000.0;
+        
+        // Print quantization timing info (only from thread 0 to avoid cluttered output)
+        if (ith == 0) {
+            const double throughput_mb_per_sec = (total_elements_quantized * sizeof(float)) / (quant_time_ms * 1000.0);
+            printf("[QUANT] Thread %d: %.3f ms, %lld elements, %.2f MB/s (src1: %s -> %s)\n", 
+                   ith, quant_time_ms, (long long)total_elements_quantized, throughput_mb_per_sec,
+                   ggml_type_name(src1->type), ggml_type_name(vec_dot_type));
+        }
     }
 
     if (ith == 0) {
