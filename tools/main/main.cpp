@@ -41,6 +41,24 @@ static std::vector<llama_token> * g_output_tokens;
 static bool is_interacting  = false;
 static bool need_insert_eot = false;
 
+int64_t start_time;
+
+static bool cb_get_latency(struct ggml_tensor * tensor, bool ask, void * user_data) { //callback function -ym
+     if(ask) {
+        start_time = ggml_time_us();
+        return true;
+     }
+
+     int64_t end_time = ggml_time_us();
+     int64_t latency = end_time - start_time;
+     LOG("[[[[Latency for Tensor]]]] '%s' (%s): %lld us\n",tensor->name,ggml_op_name(tensor->op),latency);
+     ggml_tensor * src_tensor = tensor -> src[0];
+     LOG("[[[[Latency for Tensor]]]] [%d, %d, %d, %d]\n", src_tensor->ne[0],src_tensor->ne[1],src_tensor->ne[2],src_tensor->ne[3]);
+     LOG("[[[[Latency for Tensor]]]] [%d, %d, %d, %d]\n", tensor->ne[0],tensor->ne[1],tensor->ne[2],tensor->ne[3]);
+
+     return true;
+}
+
 static void print_usage(int argc, char ** argv) {
     (void) argc;
 
@@ -98,6 +116,8 @@ int main(int argc, char ** argv) {
     // (note for later: this is a slightly awkward choice)
     console::init(params.simple_io, params.use_color);
     atexit([]() { console::cleanup(); });
+
+    params.cb_eval = cb_get_latency;
 
     if (params.embedding) {
         LOG_ERR("************\n");
