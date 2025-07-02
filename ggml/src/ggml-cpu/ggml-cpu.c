@@ -1200,6 +1200,8 @@ void ggml_compute_forward_mul_mat(
     const struct ggml_tensor * src0 = dst->src[0];
     const struct ggml_tensor * src1 = dst->src[1];
 
+    int64_t t_start_total = ggml_time_us();
+
     GGML_TENSOR_BINARY_OP_LOCALS
 
     const int ith = params->ith;
@@ -1404,6 +1406,28 @@ UseGgmlGemm2:;
 
         current_chunk = atomic_fetch_add_explicit(&params->threadpool->current_chunk, 1, memory_order_relaxed);
     }
+
+    // Record GEMM time for each block
+    for (int64_t i03 = 0; i03 < ne03; i03++) {
+        for (int64_t i02 = 0; i02 < ne02; i02++) {
+            for (int64_t i01 = 0; i01 < ne01; i01++) {
+                // ... existing code ...
+                
+                int64_t t_start_block = ggml_time_us();
+                ggml_vec_dot_q(n, &d, (char *) src0->data + i1*nb1, (char *) src1->data + i2*nb2);
+                int64_t t_end_block = ggml_time_us();
+                
+                printf("GEMM block src0_type=%d src1_type=%d time=%d us n=%d\n", 
+                       (int)src0->type, (int)src1->type, 
+                       (int)(t_end_block - t_start_block), n);
+            }
+        }
+    }
+
+    int64_t t_end_total = ggml_time_us();
+    printf("GEMM total src0_type=%d src1_type=%d time=%d us\n", 
+           (int)src0->type, (int)src1->type, 
+           (int)(t_end_total - t_start_total));
 }
 
 // ggml_compute_forward_mul_mat_id
